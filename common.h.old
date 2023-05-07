@@ -1,0 +1,134 @@
+#ifdef HS_COMMON_H
+
+#include <string.h>
+
+#include <dirent.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
+#ifdef __linux__
+#include <sys/sendfile.h>
+#include <linux/limits.h>
+#endif // __linux__
+
+#ifdef __APPLE__
+#include <sys/syslimits.h>
+#endif // __APPLE__
+
+// Changes the directory path to end with a '/' for easier appending
+// Returns NULL if the directory path buffer is too small
+char* convdir(char* pbuf, size_t bufsize)
+{
+    size_t end = strlen(pbuf);
+
+    // Short-circuit magic
+    if(end <= 1 || pbuf[end - 1] == '/') {
+        return pbuf;
+    }
+
+    if(end + 1 > bufsize) {
+        return NULL;
+    }
+
+    pbuf[end] = '/';
+    pbuf[end + 1] = '\0';
+
+    return pbuf;
+}
+
+// Finds the FULL PATH of the most recent file in a directory
+// Returns pbuf if successful, otherwise returns NULL
+char* get_mrfile(const char* dirname, char* pbuf, size_t bufsize)
+{
+    DIR* dirdesc;
+    if(!(dirdesc = opendir(dirname))) {
+        return NULL;
+    }
+
+    struct dirent* curent;
+    struct stat curstat;
+    struct dirent bestent; // test if dirents are reset
+    struct timespec besttime;
+    besttime.tv_nsec = 0L; // ah yes unassigned variable woes
+    
+    size_t dirlen = strlen(dirname);
+    char* fpath = (char*) malloc(sizeof(char) * PATH_MAX);
+    strncpy(fpath, dirname, dirlen);
+    convdir(fpath, PATH_MAX);
+    size_t flen = strlen(fpath);
+    char* foff = fpath + flen;
+    
+    while((curent = readdir(dirdesc))) {
+        // Makes a "full length path"
+        strncpy(foff, curent->d_name, PATH_MAX - flen);
+        size_t pathsz = strlen(fpath);
+        fpath[pathsz] = '\0';
+
+        if(stat(fpath, &curstat)) {
+            free(fpath);
+            return NULL;
+        }
+
+        if(curstat.st_mtimespec.tv_nsec > besttime.tv_nsec) {
+            bestent = *curent;
+            besttime = curstat.st_mtimespec;
+        }
+    }
+
+    strncpy(foff, bestent.d_name, PATH_MAX - flen);
+    size_t pathsz = strlen(fpath);
+    fpath[pathsz] = '\0';
+
+    if(bufsize < pathsz + 1) {
+        free(fpath);
+        return NULL;
+    }
+
+    memcpy(pbuf, fpath, pathsz + 1);
+
+    closedir(dirdesc);
+    free(fpath);
+    
+    return pbuf;
+}
+
+// Gets an environment variable and copies it into pbuf
+// Returns NULL if the variable cannot be read, or pbuf is too small
+// Otherwise returns pbuf
+char* get_envvar(const char* varname, char* pbuf, size_t bufsize)
+{
+    if(!getenv(varname)) {
+        return NULL;
+    }
+
+    // NUL-terminator
+    size_t envlen = strlen(getenv(varname)) + 1;
+
+    if(bufsize < envlen) {
+        return NULL;
+    }
+
+    strcpy(pbuf, getenv(varname));
+
+    return pbuf;
+}
+
+// Copies a file between two file descriptors
+// Note: On Linux, uses sendfile directly, otherwise does a read/write
+int f_copy(FILE* inf, FILE* outf)
+{
+    size_t insz = 0;
+    
+    #ifdef __linux__
+    sendfile(inf, outf, NULL, insz); // TODO: Add error handling
+    #else
+    fseek(inf, 0, SEEK_END);
+    size_t inflen = ftell(inf);
+    fseek(inf, 0, SEEK_BEGIN);
+    #endif
+
+    return 0;
+}
+
+#endif // HS_COMMON_H

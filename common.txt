@@ -1,0 +1,13 @@
+hackr-skriptz-ii: common.h functions and format
+
+Prefixes:
+- get: retrieves information from the computer
+  + get_recentf: gets the most recent file from a directory
+  + get_recentp: gets the most recent full file path from a directory
+  + get_envvar: makes a copy of the environment variable
+- conv: converts between types
+  + conv_dir: makes sure a directory string has a '/' at the end
+- copy: copies between locations
+  + copy_file: copies a file
+- move: moves between locations
+  + move_file: moves a file
