@@ -39,6 +39,13 @@ char* conv_dir(char* dir, size_t dirsz)
 
 char* get_recentf(const char* dir, char* buf, size_t bufsz)
 {
+    // Because Linux and MacOS have a different stat structure for some reason
+#ifdef __APPLE__
+#define modtimesp st_mtimespec
+#else
+#define modtimesp st_mtim
+#endif
+        
     DIR* d;
     
     if(!(d = opendir(dir))) {
@@ -69,10 +76,15 @@ char* get_recentf(const char* dir, char* buf, size_t bufsz)
         if(stat(dirpath, &c_stat)) {
             goto fail;
         }
-
-        if(c_stat.st_mtimespec.tv_nsec > b_time.tv_nsec) {
+        
+        int is_file = (c_stat.st_mode & S_IFMT) == S_IFREG;
+        int is_newer = c_stat.modtimesp.tv_sec == b_time.tv_sec ?
+            c_stat.modtimesp.tv_nsec > b_time.tv_nsec :
+            c_stat.modtimesp.tv_sec > b_time.tv_sec;
+        
+        if(is_newer && is_file) {
             b_entry = *c_entry;
-            b_time = c_stat.st_mtimespec;
+            b_time = c_stat.modtimesp;
         }
     }
 

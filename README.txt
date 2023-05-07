@@ -13,3 +13,4 @@ Todo:
 - Optimize copy_file for Linux's sendfile() command
 - Add error strings to common.h (for an operation kinda like OpenGL's
   glGetShaderInfoLog)
+- Add a `make install` command to get rid of the crappy shell script
