@@ -39,13 +39,6 @@ char* conv_dir(char* dir, size_t dirsz)
 
 char* get_recentf(const char* dir, char* buf, size_t bufsz)
 {
-    // Because Linux and MacOS have a different stat structure for some reason
-#ifdef __APPLE__
-#define modtimesp st_mtimespec
-#else
-#define modtimesp st_mtim
-#endif
-        
     DIR* d;
     
     if(!(d = opendir(dir))) {
@@ -55,8 +48,7 @@ char* get_recentf(const char* dir, char* buf, size_t bufsz)
 
     struct dirent* c_entry, b_entry;
     struct stat c_stat;
-    struct timespec b_time;
-    b_time.tv_nsec = 0L;
+    struct timespec b_time = { 0, 0L };
 
     size_t dirlen = strlen(dir), filelen;
     char* dirpath = (char*) malloc(sizeof(char) * PATH_MAX), *diroff;
@@ -76,16 +68,26 @@ char* get_recentf(const char* dir, char* buf, size_t bufsz)
         if(stat(dirpath, &c_stat)) {
             goto fail;
         }
-        
+
         int is_file = (c_stat.st_mode & S_IFMT) == S_IFREG;
-        int is_newer = c_stat.modtimesp.tv_sec == b_time.tv_sec ?
-            c_stat.modtimesp.tv_nsec > b_time.tv_nsec :
-            c_stat.modtimesp.tv_sec > b_time.tv_sec;
-        
+#ifdef __APPLE__
+        int is_newer = c_stat.st_mtime == b_time.tv_sec ?
+            c_stat.st_mtimensec > b_time.tv_nsec :
+            c_stat.st_mtime > b_time.tv_sec;
         if(is_newer && is_file) {
             b_entry = *c_entry;
-            b_time = c_stat.modtimesp;
+            b_time.tv_sec = c_stat.st_mtime;
+            b_time.tv_nsec = c_stat.st_mtimensec;
         }
+#else
+        int is_newer = c_stat.st_mtim.tv_sec == b_time.tv_sec ?
+            c_stat.st_mtim.tv_nsec > b_time.tv_nsec :
+            c_stat.st_mtim.tv_sec > b_time.tv_sec;
+        if(is_newer && is_file) {
+            b_entry = *c_entry;
+            b_time = c_stat.st_mtim;
+        }
+#endif // __APPLE__
     }
 
     
